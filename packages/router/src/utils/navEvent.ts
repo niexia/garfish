@@ -1,4 +1,5 @@
 import { validURL } from '@garfish/utils';
+import { encode } from 'querystring';
 import { RouterConfig, __GARFISH_ROUTER_UPDATE_FLAG__ } from '../config';
 
 function createPopStateEvent(state: any, originalMethodName: string) {
@@ -20,6 +21,51 @@ export const callCapturedEventListeners = (type: keyof History) => {
   window.dispatchEvent(eventArguments);
 };
 
+const encodeReserveRE = /[!'()*]/g;
+const encodeReserveReplacer = c => '%' + c.charCodeAt(0).toString(16);
+const commaRE = /%2C/g;
+
+const encode = (str: string) => encodeURIComponent(str)
+  .replace(encodeReserveRE, encodeReserveReplacer)
+  .replace(commaRE, ',')
+
+const stringifyQuery = function (query: { [key: string]: any }): string {
+  const res = query 
+    ? Object.keys(query).map(key => {
+        const val = query[key];
+
+        if (val === undefined) {
+          return '';
+        }
+
+        if (val === null) {
+          return encode(key)
+        }
+        if (Array.isArray(val)) {
+          const result = [];
+          val.forEach(v => {
+            if (v === undefined) {
+              return;
+            }
+
+            if (v === null) {
+              result.push(encode(key));
+              return;
+            }
+
+            result.push(`${encode(key)}=${encode(v)}`)
+          })
+
+          return result.join('&');
+        }
+      })
+      .filter(item => item?.length)
+      .join('&')
+    : null;
+
+    return res ? `?${res}` : '';
+}
+
 const handlerParams = function (
   path: string,
   query: { [key: string]: string },
@@ -28,12 +74,7 @@ const handlerParams = function (
   if (!path || typeof path !== 'string') return '';
   let url = path;
   if (url[0] !== '/') url = '/' + url;
-  if (Object.prototype.toString.call(query) === '[object Object]') {
-    const qs = Object.keys(query)
-      .map((key) => `${key}=${query[key]}`)
-      .join('&');
-    url += qs ? '?' + qs : '';
-  }
+  if (Object.prototype.toString.call(query) === '[object Object]') url = url + stringifyQuery(query);
   if (basename !== '/') url = basename + url;
   if (url[0] !== '/') url = '/' + url;
   return url;
